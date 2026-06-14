@@ -1,118 +1,90 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 let books = require("./booksdb.js");
-
 const regd_users = express.Router();
 
-let users = [{"username":"abishek","password":"sri"}];
+// 1. Declare the users database array once
+let users = [{"username":"dennis","password":"abc"}];
 
+// 2. Define verification helper functions
 const isValid = (username) => {
-let userMatches = users.filter((user) => {
-return user.username === username;
-});
-return userMatches.length > 0;
-};
+    const userMatches = users.filter((user) => user.username === username);
+    return userMatches.length > 0;
+}
 
 const authenticatedUser = (username, password) => {
-let validUsers = users.filter((user) => {
-return user.username === username && user.password === password;
-});
+    const matchingUsers = users.filter((user) => user.username === username && user.password === password);
+    return matchingUsers.length > 0;
+}
 
-```
-return validUsers.length > 0;
-```
-
-};
-
-// Only registered users can login
+// 3. User login route
 regd_users.post("/login", (req, res) => {
+    console.log("login: ", req.body);
+    const username = req.body.username;
+    const password = req.body.password;
 
-```
-const username = req.body.username;
-const password = req.body.password;
+    if (!username || !password) {
+        return res.status(404).json({ message: "Error logging in" });
+    }
 
-if (!username || !password) {
-    return res.status(404).json({
-        message: "Error logging in"
-    });
-}
+    if (authenticatedUser(username, password)) {
+        let accessToken = jwt.sign({
+            data: password
+        }, 'access', { expiresIn: 60 * 60 });
 
-if (authenticatedUser(username, password)) {
-
-    let accessToken = jwt.sign(
-        {
-            data: username
-        },
-        "access",
-        {
-            expiresIn: 60 * 60
+        req.session.authorization = {
+            accessToken, username
         }
-    );
-
-    req.session.authorization = {
-        accessToken,
-        username
-    };
-
-    return res.status(200).json({
-        message: "Customer successfully logged in."
-    });
-}
-
-return res.status(208).json({
-    message: "Invalid Login. Check username and password"
-});
-```
-
+        return res.status(200).send("User successfully logged in");
+    } else {
+        return res.status(208).json({ message: "Invalid Login. Check username and password" });
+    }
 });
 
-// Add or Modify a Book Review
+// 4. Add a book review route
 regd_users.put("/auth/review/:isbn", (req, res) => {
-
-```
-const isbn = req.params.isbn;
-const review = req.query.review;
-const username = req.session.authorization.username;
-
-if (!books[isbn]) {
-    return res.status(404).json({
-        message: `ISBN ${isbn} not found`
-    });
-}
-
-books[isbn].reviews[username] = review;
-
-return res.status(200).json({
-    message: "Review added/updated successfully",
-    reviews: books[isbn].reviews
-});
-```
-
+    const isbn = req.params.isbn;
+    const review = req.body.review;
+    const username = req.session.authorization.username;
+    
+    if (books[isbn]) {
+        let book = books[isbn];
+        book.reviews[username] = review;
+        
+        return res.status(200).json({
+            message: `Review successfully posted/updated by ${username}`,
+            updated_book: book
+        });
+    }
+    else {
+        return res.status(404).json({message: `ISBN ${isbn} not found`});
+    }
 });
 
-// Delete a Book Review
+
+// 5. Delete a book review route
 regd_users.delete("/auth/review/:isbn", (req, res) => {
+    const isbn = req.params.isbn;
+    const username = req.session.authorization.username;
+    
+    if (books[isbn]) {
+        let book = books[isbn];
+        
+        // 1. Delete the specific user's review
+        delete book.reviews[username];
+        
+        // 2. Return success status alongside the updated book entry
+        return res.status(200).json({
+            message: `Review by user '${username}' for ISBN ${isbn} has been successfully deleted.`,
+            updated_book: book
+        });
+    }
+    else {
+        return res.status(404).json({message: `ISBN ${isbn} not found`});
+    }
+  });  
 
-```
-const isbn = req.params.isbn;
-const username = req.session.authorization.username;
-
-if (!books[isbn]) {
-    return res.status(404).json({
-        message: `ISBN ${isbn} not found`
-    });
-}
-
-delete books[isbn].reviews[username];
-
-return res.status(200).json({
-    message: "Review deleted successfully",
-    reviews: books[isbn].reviews
-});
-```
-
-});
-
+// 6. Export everything cleanly
 module.exports.authenticated = regd_users;
 module.exports.isValid = isValid;
 module.exports.users = users;
